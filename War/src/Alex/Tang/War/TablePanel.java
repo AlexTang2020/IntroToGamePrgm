@@ -282,7 +282,7 @@ public class TablePanel extends JPanel{
 		
 		for(int i = 0; i < playerHand.length; i++) {
 			if(playerHand[i].size() == 1) {
-				Card card = playerHand[i].getLast();
+				Card card = playerHand[i].getLast();;
 				if(card.contains(x, y)) {
 					String message = "Are you ready for battle?";
 					int option = JOptionPane.showConfirmDialog(this, message, "Mindful War", JOptionPane.YES_NO_OPTION);
