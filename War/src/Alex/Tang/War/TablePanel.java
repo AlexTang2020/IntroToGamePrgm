@@ -1,6 +1,7 @@
 package Alex.Tang.War;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -9,14 +10,18 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.util.concurrent.TimeUnit;
 
+import javax.sound.sampled.Clip;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+
+import Alex.Tang.MyTimer.TimerPanel;
+import Alex.Tang.myCommonMethods.FileIO;
 
 
 /**
  * Author: Alexander Tang
  * Date Created: 9-7-2018
- * Last Updated: 9-28-2018
+ * Last Updated: 10-18-2018
  */
 
 public class TablePanel extends JPanel{
@@ -73,12 +78,25 @@ public class TablePanel extends JPanel{
 	private int mouseX = 0;
 	private int mouseY = 0;
 	
+	private int turns = 0;
+	
+	//Sound File Names Source: ZapSplat.com, freesound.org
+	private static final String ALARM = "alarm.wav";
+	private static final String BATTLE_PREP = "BattlePrep.wav";
+	private static final String WIN = "BattleWin.wav";
+	private static final String LOST = "BattleLose.wav";
+	private static final String TIE = "BattleTie.wav";
+	private static final String VICTORY = "Victory.wav";
+	private static final String DEFEAT = "Lost.wav";
+	
+	
 	public Dimension getPreferredSize() {
 		Dimension size = new Dimension(WIDTH, HEIGHT);
 		return size;
 	}// end getPreferredSize()
 	
 	public TablePanel() {
+		
 		int x = AIHANDX;
 		int y = AIHANDY;
 		int px = PHANDX;
@@ -93,7 +111,6 @@ public class TablePanel extends JPanel{
 		}//end for
 		
 		
-		
 		//mouse listener
 		addMouseListener(new MouseAdapter(){
 			public void mousePressed(MouseEvent e) {
@@ -101,6 +118,7 @@ public class TablePanel extends JPanel{
 				int y = e.getY();
 				clicked(x,y);
 				selected(x,y);
+				warning();
 			}//end mousePressed()
 					
 			public void mouseReleased(MouseEvent e) {
@@ -120,6 +138,7 @@ public class TablePanel extends JPanel{
 	}//end Constructor
 	
 	public void newGame() {
+		turns = 0;
 		deck = new Deck();
 		deal();
 	}//end newGame()
@@ -279,16 +298,17 @@ public class TablePanel extends JPanel{
 	
 	private void selected(int x, int y) {
 		//Listen for mouse click on playerHand, move card to playerChoice if empty
-		
 		for(int i = 0; i < playerHand.length; i++) {
 			if(playerHand[i].size() == 1) {
 				Card card = playerHand[i].getLast();;
 				if(card.contains(x, y)) {
+					Clip clip = FileIO.playClip(this, BATTLE_PREP);
 					String message = "Are you ready for battle?";
 					int option = JOptionPane.showConfirmDialog(this, message, "Mindful War", JOptionPane.YES_NO_OPTION);
-					
+					clip.stop();
 					//check user response
 					if(option == JOptionPane.YES_OPTION) {
+						War.getTimerPanel().stop();
 						mouseX = x;
 						mouseY = y;
 						playerHand[i].removeLast();
@@ -310,38 +330,39 @@ public class TablePanel extends JPanel{
 						JOptionPane.showMessageDialog(this, "Please wait for Opponent");
 						repaint();
 						
-						//Pause for AI
-						try {
-							TimeUnit.SECONDS.sleep(1);
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}//end try
+						//Pause for AI, Battle Calculations, Reset for next round/game
+						waiting();
 						battleCalc(card, aiCard, aiPick);
-						
-						repaint();
-						isGameOver();
-					}
-				}
-			}
-		}
-	}
+						waiting();
+						reset();
+					}//end if
+				}//end if
+			}//end if
+		}//end for
+	}//end selected()
 	
 	//Determines winner of battle
 	private void battleCalc(Card card, Card aiCard, int aiPick) {
 		if(card.getValue() > aiCard.getValue()) {
+			Clip clip = FileIO.playClip(this, WIN);
 			JOptionPane.showMessageDialog(this, "You Won the Battle!");
 			playerStack.addToBeginning(card);
 			playerStack.addToBeginning(aiCard);
+			clip.stop();
 		}
 		else if(card.getValue() < aiCard.getValue()) {
+			Clip clip = FileIO.playClip(this, LOST);
 			JOptionPane.showMessageDialog(this, "You Lost the Battle!");
 			aiStack.addToBeginning(card);
 			aiStack.addToBeginning(aiCard);
+			clip.stop();
 		}
 		else {
+			Clip clip = FileIO.playClip(this, TIE);
 			JOptionPane.showMessageDialog(this, "It's a Tie! Both cards are lost!");
 			discard.add(card);
 			discard.add(aiCard);
+			clip.stop();
 		}//end if
 		playerChoice.remove();
 		aiChoice.remove();
@@ -353,6 +374,7 @@ public class TablePanel extends JPanel{
 	
 	private void isGameOver() {
 		//Check player and ai hand and deck
+		turnTimer();
 		boolean gameOver = true;
 		for(int i = 0; i < playerHand.length; i++) {
 			if(playerHand[i].size() != 0) {
@@ -361,33 +383,108 @@ public class TablePanel extends JPanel{
 			}//end if
 		}//end for
 		if(playerStack.size() == 0 && gameOver) {
-			String message = "YOU LOST! Do you want to play again?";
-			int option = JOptionPane.showConfirmDialog(this, message, "Play Again?", JOptionPane.YES_NO_OPTION);
-			
-			//check user response
-			if(option == JOptionPane.YES_OPTION) {
-				newGame();
-			}
-			else {
-				System.exit(0);
-			}//end if
+			defeat();
 		}
 		else {
 			if(aiStack.size() == 0) {
 				if(aiHand[0].size()==0 && aiHand[1].size()==0 && aiHand[2].size()==0 && aiHand[3].size()==0 && aiHand[4].size()==0) {
-					String message = "YOU WON! Do you want to play again?";
-					int option = JOptionPane.showConfirmDialog(this, message, "Play Again?", JOptionPane.YES_NO_OPTION);
-					
-					//check user response
-					if(option == JOptionPane.YES_OPTION) {
-						newGame();
-					}
-					else {
-						System.exit(0);
-					}//end if
+					victory();
 				}//end if
 			}//end if
 		}//end if
 	}//end isGameOver
 	
+	//Sleep thread for player to see cards played or waiting for AI choice
+	private void waiting() {
+		try {
+			Thread.sleep(3000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}//end try
+	}//end waiting()
+	
+	//Reset timer and field for next round
+	private void reset() {
+		War.getTimerPanel().setTimer(31);
+		repaint();
+		isGameOver();
+		War.getTimerPanel().start();
+	}//end reset()
+	
+	//Forces player to pick a card or continue hearing the alarm
+	private void warning() {
+		if(War.getTimerPanel().getTime() <= 0) {
+			Clip clip = FileIO.playClip(this, ALARM);
+			clip.loop(2);
+			JOptionPane.showMessageDialog(this, "Please Pick A Card!");
+			clip.stop();
+		}//end if
+	}//end warning()
+	
+	//Keeps track of turns and triggers dialog at set turns
+	private void turnTimer() {
+		turns++;
+		if(turns == 25) {
+			Clip clip = FileIO.playClip(this, ALARM);
+			JOptionPane.showMessageDialog(this, "This War is half-way over\n"
+											  + "Currently you have " + playerStack.size() + " cards in your deck.\n"
+											  + "Your opponent has " + aiStack.size() + " cards in their deck.");
+			clip.stop();
+		}
+		else if(turns == 40){
+			Clip clip = FileIO.playClip(this, ALARM);
+			JOptionPane.showMessageDialog(this, "Only 10 more turns left!");
+			clip.stop();
+		}
+		else if(turns == 45){
+			Clip clip = FileIO.playClip(this, ALARM);
+			JOptionPane.showMessageDialog(this, "5 more turns left!\n"
+											  + "Your Deck: " + playerStack.size() + "\n"
+											  + "AI Deck: " + aiStack.size());
+			clip.stop();
+		}
+		else if(turns == 50) {
+			turnLimit();
+		}
+	}
+	
+	//Decides winner of game after a set turn limit
+	private void turnLimit() {
+		JOptionPane.showMessageDialog(this, "   This War Must Come To An End! \n "
+										  + "The Winner will be determined now!");
+		if(playerStack.size() < aiStack.size()) {
+			defeat();
+		}
+		else {
+			victory();
+		}//end if
+	}//end if
+	
+	private void defeat() {
+		Clip clip = FileIO.playClip(this, DEFEAT);
+		String message = "YOU LOST! Do you want to play again?";
+		int option = JOptionPane.showConfirmDialog(this, message, "Play Again?", JOptionPane.YES_NO_OPTION);
+		clip.stop();
+		//check user response
+		if(option == JOptionPane.YES_OPTION) {
+			newGame();
+		}
+		else {
+			System.exit(0);
+		}//end if
+	}//end defeat()
+	
+	private void victory() {
+		Clip clip = FileIO.playClip(this, VICTORY);
+		String message = "YOU WON! Do you want to play again?";
+		int option = JOptionPane.showConfirmDialog(this, message, "Play Again?", JOptionPane.YES_NO_OPTION);
+		clip.stop();
+		//check user response
+		if(option == JOptionPane.YES_OPTION) {
+			newGame();
+		}
+		else {
+			System.exit(0);
+		}//end if
+	}//end victory()
 }//end class
